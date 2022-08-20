@@ -1,0 +1,962 @@
+---
+title: "Video Game Sales"
+author: "Sanay Shah,Ishpreet Kaur,Moheth Muralidharan"
+date: "12/14/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(fig.width=12, fig.height=8)
+```
+
+
+
+## **Overview**
+
+## The video game industry is at the peak of an exciting evolution. These games have been around for decades, providing entertainment for any given age group. They have significantly evolved from the early days of computer games to the latest complex platforms. The Data provided in our project is a combination of 3 datasets based on Video Games Sales. 
+
+## The data can be described by the Name of the video games, their publishers, the platforms on which they are played, Genre classification, the regional sales mainly in North America, Europe and Japan, the Critic and User Scores etc. 
+
+## Through this project we have attempted to apply the learnt concepts of Probability, Cluster Analysis, Text Analysis and Time Series Analysis to gain an in-depth understanding of the sales trends undertaken by companies to target its audience.
+
+
+```{r, echo=FALSE, warning=FALSE}
+#Import Libraries
+library(devtools)
+library(tidyr)
+library(magrittr)
+library(stringr)
+library(lubridate)
+library(lemon)
+library(knitr)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(readr)
+library(tidytext)
+library(janeaustenr)
+library(RColorBrewer)
+library(fpc)
+library(clValid)
+library(cluster)
+library(factoextra)
+library(viridis)
+library(hrbrthemes)
+library(wordcloud)
+library(wordcloud2)
+library(tau)
+library(nonlinearTseries)
+library(TTR)
+library(tibble)
+library(forecast)
+library(tinytex)
+library(webshot)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#Import Dataset
+df_vgsales <- read_csv("vgsales.csv")
+df_reviews <- read_csv("all_games.csv")
+df_critics <- read_csv("criticscores.csv")
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE}
+df_reviews <-
+  df_reviews %>% 
+  rename(
+    Name = name, 
+    Platform=platform,
+    Summary = summary,
+    Release_Date=release_date,
+    Metascore=meta_score)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+df_sales<- inner_join(df_vgsales,df_critics , by = c("Name","Platform"))
+
+df_sales = subset(df_sales, select = -c(12,13,15,19,20,21,22,23,24,25) )
+df_sales <- df_sales %>%  rename(
+    Rank = Rank.x, 
+    Year=Year.x,
+    Genre=Genre.x,
+  NA_Sales =NA_Sales.x,
+    JP_Sales= JP_Sales.x,
+   Other_Sales =Other_Sales.x,
+    Global_Sales= Global_Sales.x,
+   Rating=ESRB_Rating,
+  Publisher=Publisher.x
+    )
+
+Record <- kable(
+  df_sales%>% 
+    summarise(total_records=n())
+  ,caption="Record Count")
+
+
+```
+
+```{r}
+summary(df_sales)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+df_games<- inner_join(df_sales,df_reviews, by = c("Name","Platform"))
+df_games = subset(df_games, select = -c(15) )
+df_games<-df_games %>% 
+  rename(
+    User_Score=user_review)
+
+
+```
+
+```{r}
+summary(df_games)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+df_games<-df_games %>%
+mutate(
+Release_Date=as.Date(Release_Date, format = "%B %d,%Y"),
+) %>%
+mutate(
+
+Release_quarter=quarter(Release_Date))
+
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE}
+ Platforms<- kable(
+  df_sales %>% 
+    filter(is.na(Platform)== FALSE)%>%
+    group_by(Platform) %>%
+    summarise(total_records=n())%>%
+  arrange(desc(total_records)))
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE}
+ Pub_score <-kable(
+  df_sales %>% 
+    select(Publisher,User_Score)%>%
+     filter((Publisher)== "Nintendo")%>%
+    filter((Publisher)== "Nintendo")%>%
+    group_by(Publisher) %>%
+    summarise(total_records=n())%>%
+    arrange(desc(total_records)))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+
+   devplr<- df_sales %>% 
+    filter(is.na(Developer)== FALSE)%>%
+    group_by(Developer) %>%
+    summarise(total_records=n())%>%
+    arrange(desc(total_records))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+genre<-   df_sales %>% 
+    filter(is.na(Genre)== FALSE)%>%
+    group_by(Genre) %>%
+    summarise(total_records=n())%>%
+    arrange(desc(total_records))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ Pub_s <-df_sales %>%
+  count(Publisher, sort = TRUE) %>%
+  filter(n > 150) %>%
+  mutate(Publisher = reorder(Publisher, n)) %>%
+ggplot(aes(n, Publisher)) +
+ geom_bar(stat="identity", fill="steelblue")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+nam_Sal <-df_sales %>% 
+select(Name,Platform,Global_Sales)%>%
+arrange(desc(Global_Sales))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ Rating_count <-kable(
+    df_sales %>% 
+    filter(is.na(Rating)== FALSE)%>%
+    group_by(Rating) %>%
+    summarise(total_records=n())%>%
+    arrange(desc(total_records)))
+```
+## ** Probability **
+## ** Q.1 What are the games developed based on different age groups? **
+```{r, echo=FALSE, warning=FALSE}
+Rating_det <- kable(
+x<- df_sales %>%                                       
+filter(is.na(Rating)== FALSE)%>%                        #Remove NA values for Rating
+group_by(Rating) %>%                                    #Group by Rating
+summarise(total_records=n())%>%                         #Summarising total records
+arrange(desc(total_records)))                           #Arrange Rating in descending order 
+num_row<-nrow(x)
+
+kable(
+y<-df_sales %>%
+filter(is.na(Rating)== FALSE)%>%                       #Remove Na values for Rating
+summarise(total_records=n())                           #Summarising total records
+)
+z<-NULL
+
+for (i in 1:num_row){                                  #Calculation of Probability 
+z[i]<- x[i,2]/y
+}
+z <-round(unlist(z),3)
+ 
+        
+```
+
+```{r, echo=FALSE, warning=FALSE,fig.align = 'center'}
+H <-barplot(unlist(z),ylim=c(0,0.6), main="Probability of Ratings",xlab="Ratings",ylab="Probability", col=c("steelblue"),legend = rownames(unlist(z)),names.arg=c("E", "T", "M", "E10+","EC", "RP"))                                    #Plotting of bar graph
+
+ text(x = H, y = unlist(z), label = unlist(z), pos = 3, cex = 0.7, col = "black") 
+```
+
+## **Conclusion:** Based on the rating column we can figure out the probability of the number of games developed in a particular age group, where E=Everyone, T=Teen, M=Mature, E10+= Everyone10+, EC= Early childhood, RP= Rating Pending. 
+## We can see that the most games are for 'Everyone' followed by 'Teens', 'Mature', 'Everyone10+'. Through this we can conclude that the games are targeted for larger audience in order to earn more Revenue. 
+
+## **Q.2 Top Developers prefered to build games in which Genre?**
+```{r, echo=FALSE, warning=FALSE,fig.align = 'center'}
+J<- df_sales %>%                       
+    filter(is.na(Genre)== FALSE)%>%                                   #Remove NA values
+    group_by(Genre) %>%                                               #Group by Genre
+    summarise(total_records=n())                                      #Summarise total records
+
+K <- df_sales %>%                                                     
+    filter(is.na(Developer)== FALSE)%>%                               #Remove NA values
+    filter((Developer) != "Unknown")%>%                               #Remove all unknown values
+    group_by(Developer) %>%                                           #Group by Developer
+    summarise(Total_records=n())%>%                                   #Summarise total records
+    arrange(desc(Total_records))                                      #Arrange total records in descending order
+    
+L <-head(K,12)                                                        
+    
+L <-as.data.frame(L)
+  joint_freq <- outer(J$total_records, L$Total_records, FUN = "+")    #Joint Frequency is calculated
+  rownames(joint_freq) <- J$Genre
+  colnames(joint_freq) <- L$Developer
+
+joint_prob <- round(joint_freq/sum(joint_freq),3)                     #Joint Probability is found
+
+
+Dev <-as.data.frame(joint_prob)                                   
+
+Dev_Prob <- Dev%>%
+  rownames_to_column() %>%                                          
+  gather(colname, value, -rowname)
+
+Prob_Chart <-ggplot(Dev_Prob, aes(rowname ,colname)) +               #Heatmap is plotted
+  geom_tile(aes(fill = value)) +
+  geom_text(aes(label = round(value, 3)),color="black", size=2)+
+    xlab('Genre')+
+   ylab('Developer')+
+  ggtitle("Joint Probability Distribution of Genre & Top Developers ")+
+     theme(axis.text.x = element_text(size =10,angle = 90,hjust=0.9,vjust=0.2))+
+  scale_fill_gradient(low = "darkolivegreen1",
+                      high = "darkolivegreen4",
+                      guide = "colorbar")
+
+Prob_Chart
+```
+
+
+
+
+## ** Conclusion: ** The analysis measures the likelihood for the Top 12 Developers to develop a game for a specific Genre using Joint Probabilty Distribution. 
+##From the above graph we can conclude that the developers prefer to develop games of Action and Sports Genre the most as they have the highest Joint Probability. 
+
+
+## ** Q.3 Find the comparison between the sales of North America and Europe on the basis of the Top 5 Publishers **
+```{r, echo=FALSE, warning=FALSE}
+Ab <-kable(
+pub<- df_sales %>%
+filter(is.na(Publisher)== FALSE)%>%
+group_by(Publisher) %>%
+summarise(total_records=n())%>%
+arrange(desc(total_records)))
+top<-head(pub,5)
+ 
+temp<-top[1:5,1]
+
+ 
+na<-sum(df_sales[,'NA_Sales'],rm.na=TRUE)
+
+ 
+eu<-sum(df_sales[,'EU_Sales'],rm.na=TRUE)
+
+ 
+ea_na<-df_sales%>%
+filter(Publisher=="Electronic Arts")%>%
+summarise(ea_na=sum(NA_Sales)/na)
+ea_na<-unlist(ea_na)
+ 
+ea_eu<-df_sales%>%
+filter(Publisher=="Electronic Arts")%>%
+summarise(ea_eu=sum(EU_Sales)/eu)
+ea_eu<-unlist(ea_eu)
+ 
+act_na<-df_sales%>%
+filter(Publisher=="Activision")%>%
+summarise(act_na=sum(NA_Sales)/na)
+act_na<-unlist(act_na)
+ 
+act_eu<-df_sales%>%
+filter(Publisher=="Activision")%>%
+summarise(act_eu=sum(EU_Sales)/eu)
+act_eu<-unlist(act_eu)
+ 
+ubi_na<-df_sales%>%
+filter(Publisher=="Ubisoft")%>%
+summarise(ubi_na=sum(NA_Sales)/na)
+ubi_na<-unlist(ubi_na)
+ 
+ubi_eu<-df_sales%>%
+filter(Publisher=="Ubisoft")%>%
+summarise(ubi_eu=sum(EU_Sales)/eu)
+ubi_eu<-unlist(ubi_eu)
+ 
+nbg_na<-df_sales%>%
+filter(Publisher=="Namco Bandai Games")%>%
+summarise(nbg_na=sum(NA_Sales)/na)
+nbg_na<-unlist(nbg_na)
+ 
+nbg_eu<-df_sales%>%
+filter(Publisher=="Namco Bandai Games")%>%
+summarise(nbg_eu=sum(EU_Sales)/eu)
+nbg_eu<-unlist(nbg_eu)
+ 
+kde_na<-df_sales%>%
+filter(Publisher=="Konami Digital Entertainment")%>%
+summarise(kde_na=sum(NA_Sales)/na)
+kde_na<-unlist(kde_na)
+ 
+kde_eu<-df_sales%>%
+filter(Publisher=="Konami Digital Entertainment")%>%
+summarise(kde_eu=sum(EU_Sales)/eu)
+kde_eu<-unlist(kde_eu)
+ 
+data <- data.frame(ea_na,ea_eu,act_na,act_eu,ubi_na,ubi_eu,nbg_na,nbg_eu,kde_na,kde_eu)
+data_new<-as.data.frame(t(data))
+ 
+data1 <- c(ea_na,act_na,ubi_na,nbg_na,kde_na)
+
+ 
+data2<-c(ea_eu,act_eu,ubi_eu,nbg_eu,kde_eu)
+
+ 
+data<-rbind(data1,data2)
+data<-round(data,2) 
+rownames(data)<-c("North America","Europe")
+colnames(data)<-c("Electronic Arts","Activision","Ubisoft","Namco Bandai Games","Konami Digital Entertainment")
+ 
+
+```
+
+
+```{r, echo=FALSE, warning=FALSE}
+group_bar <-barplot(data ,main="Comparision of NA and EU sales of Top 5 Publishers",
+beside = TRUE,
+ylim=c(0,0.2),
+col = c("steelblue", "skyblue1"),
+xlab = "Publishers", ylab = "Probability",
+legend.text = c("North America","Europe"),
+args.legend = list(cex=0.75,x = "topright"))
+text(x = group_bar, y = data, label = data, pos = 3, cex = 0.8, col = "black")
+```
+
+
+## **Conclusion:** The North America and Europe sales of the Top 5 publishers have been compared by using probability. We can find that the sales for Electronic Arts is more in the Europe region compared to the North American region while for activision, the sales in Europe is more compared to the North American sales.
+
+
+## ** Q.4 Distribution of Video Games sales for the PS Series**
+```{r, echo=FALSE, warning=FALSE,fig.align = 'center'}
+Plat_act <-kable(
+plat<-df_sales%>%
+filter(Genre=="Action")%>%
+group_by(Platform)%>%
+summarise(no.of.platforms=n())%>%
+arrange(desc(no.of.platforms)))
+
+temp<-nrow(plat)
+
+v<- plat[1:temp,2]
+
+no_plat<-sum(v[1:temp,1])
+
+ps<-plat%>%
+filter(Platform=="PS")%>%
+group_by(no.of.platforms/no_plat)
+
+ps2<-plat%>%
+filter(Platform=="PS2")%>%
+group_by(no.of.platforms/no_plat)
+ps3<-plat%>%
+filter(Platform=="PS3")%>%
+group_by(no.of.platforms/no_plat)
+
+ps4<-plat%>%
+filter(Platform=="PS4")%>%
+group_by(no.of.platforms/no_plat)
+
+psp<-plat%>%
+filter(Platform=="PSP")%>%
+group_by(no.of.platforms/no_plat)
+
+tot_ps<-ps[3]+ps2[3]+ps3[3]+ps4[3]+psp[3]
+
+
+norm_ps<-ps[3]/tot_ps
+norm_ps2<-ps2[3]/tot_ps
+norm_ps3<-ps3[3]/tot_ps
+norm_ps4<-ps4[3]/tot_ps
+norm_psp<-psp[3]/tot_ps
+
+norm_ps<-round(norm_ps,2)
+norm_ps2<-round(norm_ps2,2)
+norm_ps3<-round(norm_ps3,2)
+norm_ps4<-round(norm_ps4,2)
+norm_psp<-round(norm_psp,2)
+
+pie<-c(norm_ps,norm_ps2,norm_ps3,norm_ps4,norm_psp)
+pie_num<-as.numeric(pie)
+
+
+lables <- c("PS", "PS2","PS3", "PS4", "PSP")
+lables <- paste(lables, pie_num)
+lables <- paste(lables,"%",sep="")
+pie(pie_num,labels = lables, col=rainbow(length(lables)),
+main="Pie Chart of Playstations")
+```
+## **Conclusion: ** The games produced for a particular Playstation platform is found using Probability Distribution Function. The probability of the games produced for a particular Platform among the Playstation series can be seen from the graph.
+##Having first transitioned to games in the digital space, now expanding to gaming across platforms and devices we can conclude that there were around 60% sales of the video games played on PS2 and PS3 than any other PS Station platform. We can say that these two platforms were the most popular amongst all. 
+
+## Clustering Analysis 
+## ** Q.5 Classify each region-wise sales with respect to the Global sales**
+```{r, echo=FALSE, warning=FALSE, figures-side1, fig.show="hold", out.width="50%"}
+
+df_vgsales <- na.omit(df_vgsales)                                                   #Remove NA values
+
+#K-Means Cluster Analysis for North America Sales : Global Sales
+fviz_nbclust(df_vgsales[, c(7,11)], kmeans, method = "silhouette", k.max = 10)      #fviz_nbclust()
+km.NASales <- kmeans(as.data.frame(df_vgsales[, c(7,11)]), centers=2, nstart = 100) # Compute k-means with k = 2
+km.NAcluster <- fviz_cluster( km.NASales, as.data.frame(df_vgsales[, c(7,11)]) ) +
+  ggtitle("Cluster Analysis of North America and Gloabal Sales")   #fviz_cluster
+
+#K-Means Cluster Analysis for Europe : Glabal Sales
+fviz_nbclust(df_vgsales[, c(8,11)], kmeans, method = "silhouette", k.max = 10)      #fviz_nbclust()
+km.EUSales <- kmeans(as.data.frame(df_vgsales[, c(8,11)]), centers=2, nstart = 100) # Compute k-means with k = 2
+km.EUcluster <- fviz_cluster( km.EUSales, as.data.frame(df_vgsales[, c(8,11)]))+
+  ggtitle("Cluster Analysis of Europe and Global Sales")     #fviz_cluster
+
+#K-Means Cluster Analysis forJapan Sales : Global Sales
+ fviz_nbclust(df_vgsales[, c(9,11)], kmeans, method = "silhouette", k.max = 10)      #fviz_nbclust()
+km.JPSales <- kmeans(as.data.frame(df_vgsales[, c(9,11)]), centers=2, nstart = 100) # Compute k-means with k = 2
+km.JPcluster <- fviz_cluster(km.JPSales, as.data.frame(df_vgsales[, c(9,11)]))+
+  ggtitle("Cluster Analysis of Japan and Global Sales")     #fviz_cluster
+
+#K-Means Cluster Analysis forOther Sales : Global Sales 
+ fviz_nbclust(df_vgsales[, c(10,11)], kmeans, method = "silhouette", k.max = 10)         #fviz_nbclust()
+km.OtherSales <- kmeans(as.data.frame(df_vgsales[, c(10,11)]), centers=2, nstart = 100) # Compute k-means with k = 2
+km.Othercluster <- fviz_cluster( km.OtherSales, as.data.frame(df_vgsales[, c(10,11)]))+
+  ggtitle("Cluster Analysis of Other Countries and Global Sales")  #fviz_cluster
+```
+## **Conclusion: ** By using silhouette method in k-means we could observe that the optimal number of clusters are 2. We also observed that after reaching the optimal value the average silhouette width keeps decreasing gradually.
+
+```{r, echo=FALSE, warning=FALSE, figures-side2, fig.show="hold", out.width="50%"}
+#Region-wise Sales: Global_Sales Clusters
+
+km.NAcluster     #Print clusters for North America(NA) Sales and global Sales
+km.NASales$centers
+km.EUcluster #Print clusters for Europe(EU) Sales and global Sales
+km.EUSales$centers
+km.JPcluster 
+km.JPSales$centers#Print cluster for Japan(JP) sales and global Sales
+km.Othercluster
+km.OtherSales$centers##Print clusters for other countries Sales and global Sales
+```
+## **Conclusion** By performing Cluster analysis, for region-wise sales with respect to the Gloabl sales we can observe the similarities and dissimilaries in video game sales trend for respective regions. Companies can make better, data-driven decisions by identifying the pattern of sales in each region
+
+
+## ** Q.6 Cluster Analysis based on Critic Scores and User Scores **
+```{r, echo=FALSE, warning=FALSE}
+#Cluster Analysis using Critic Score- User Score
+ Scores <- df_critics%>%
+  select(Critic_Score,User_Score)%>%
+  filter(is.na(Critic_Score)==FALSE)%>%
+  filter(is.na(User_Score)==FALSE)
+
+fviz_nbclust(Scores, kmeans, method = "silhouette", k.max = 10)                  #Print region-wise clusters
+
+km.criticUser <- kmeans(Scores, centers=2, nstart = 100)                         #Compute k-means with k = 2
+
+
+km.CriticUserCluster <- fviz_cluster( km.criticUser, as.data.frame( Scores))+
+  ggtitle("Cluster Analysis of Critic Score vs User Score")
+#fviz_cluster
+
+```
+
+
+```{r}
+km.criticUser$centers
+km.CriticUserCluster
+```
+
+# **Conclusion: **
+## The kmeans function outputs the results of the clustering. We can observe the following:-
+## a. cluster means-  the centroid vector values under Critic Score and User Score columns 
+## b. clustering vector-  the group in which each observation was allocated that is in groups of 1 and
+## We performed cluster analysis on Critic Scores and User Scores, together to analyze consumer purchase trends. We can observe that the User Score and Critic Scores are similar, they go hand in hand. Concluding that the Users Score for a particular video game is largely made based on the critic scores
+
+## **Text Mining**
+
+```{r, echo=FALSE, warning=FALSE}
+Summary_words <- df_games$Summary 
+
+Summary_words %>%
+tibble(Summary_words)
+```
+
+
+
+
+## **Q.7 Based on the Description of each game, how can they be categorized into different Genres? **
+```{r, echo=FALSE, warning=FALSE}
+ Action <- df_games %>% 
+ filter(Genre == "Action")%>%
+  select(Summary)
+
+Racing <- df_games %>% 
+ filter(Genre == "Racing")%>%
+  select(Summary)
+ 
+Shooter <- df_games%>% 
+ filter(Genre == "Shooter")%>%
+  select(Summary)
+
+Role_Playing <- df_games%>% 
+  filter(Genre == "Role-Playing")%>%
+  select(Summary)
+
+Sports <- df_games %>% 
+ filter(Genre == "Sports")%>%
+  select(Summary)
+
+Simulation <- df_games %>% 
+  filter(Genre == "Simulation")%>%
+  select(Summary)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+Action_vg  <- Action %>%
+  tibble(Action$Summary)
+
+Racing_vg  <- Racing %>%
+  tibble(Racing$Summary)
+
+Shooter_vg  <- Shooter %>%
+  tibble(Shooter$Summary)
+
+Role_Playing_vg  <- Role_Playing %>%
+  tibble(Role_Playing$Summary)
+
+Sports_vg  <- Sports %>%
+  tibble(Sports$Summary)
+
+Simulation_vg  <- Simulation %>%
+  tibble(Simulation$Summary)
+
+```
+
+```{r, echo=FALSE, warning=FALSE}
+data(stop_words)
+custom_stop_words <- tibble(word=c("game","gameplay","players","play","including","gamers","player","2","nintendo","world","wii"))
+
+Action_gm <- Action_vg %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+
+Racing_gm <- Racing_vg %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+
+Shooter_gm  <- Shooter %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+ 
+Role_Playing_gm <- Role_Playing %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+  
+Sports_gm <- Sports %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+  
+Simulation_gm  <- Simulation %>%
+ unnest_tokens(word, Summary,token = "regex", pattern = "\\s+|[[:punct:]]+") %>%
+ anti_join(stop_words)%>%
+ anti_join(custom_stop_words)
+```
+
+```{r, echo=FALSE, warning=FALSE, figures-side3, fig.show="hold", out.width="50%"}
+A<- Action_gm %>%
+ count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=n),vjust=1.6, color="black", size=2.5)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency", subtitle="The most common words in Action Genre") 
+
+ B<-Racing_gm %>%
+ count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+   geom_text(aes(label=n),vjust=1.6, color="black", size=2.5)+
+   theme_minimal() +
+   theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+   geom_vline(xintercept = 0)+
+   geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency", subtitle="The most common words in Racing Genre") 
+
+ C<-Shooter_gm %>%
+ count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+   geom_text(aes(label=n),vjust=1.6, color="black", size=2.5)+
+   theme_minimal() +
+   theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+   geom_vline(xintercept = 0)+
+   geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency",subtitle="The most common words in Shooter Genre") 
+
+ D<-Role_Playing_gm %>%
+ count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=n),vjust=1.6, color="black", size=2.5)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency", subtitle="The most common words in Role Playing Genre") 
+
+ E<-Sports_gm %>%
+ count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=n),vjust=1.6, color="black", size=2.5)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency", subtitle="The most common words in Sports Genre") 
+
+ FF<-Simulation_gm %>%
+  count(word, sort = TRUE) %>%
+  top_n(10)%>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot(aes(n, word,)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  geom_text(aes(label=n),vjust=2.6, color="black", size=3)+
+  theme_minimal() +
+  theme(axis.text.x = element_text(size =10,hjust=0.9,vjust=0.2)) +
+  geom_vline(xintercept = 0)+
+  geom_hline(yintercept = 0)+
+  labs(y = NULL,x="Frequency", subtitle="The most common words in Simulation Genre") 
+```
+
+```{r, echo=FALSE, warning=FALSE, figures-side4, fig.show="hold", out.width="40%"}
+A
+B
+C
+D
+E
+FF
+```
+
+## **Conclusion: **
+## The above analysis help us to identify the most frequently used words in a particular Genre,and categorize them for customers to easily pick their preferred games. 
+## For instance, we can conclude from the graph that for 'Racing' words like cars, speed, tracks, drivers are few of the most frequently used words. 
+
+## ** Q.8 Sentiment Analysis based on the Name of the Games and how do they play a role to target customers.** 
+```{r, echo=FALSE, warning=FALSE}
+data(stop_words)
+ 
+nrc_types <- get_sentiments("nrc") %>% 
+  pull(sentiment) %>% 
+  unique()
+
+nrc_joy <- get_sentiments("nrc") %>% 
+  filter(sentiment == "joy")
+
+nrc_sad <- get_sentiments("nrc") %>% 
+  filter(sentiment == "sadness")
+
+nrc_fear <- get_sentiments("nrc") %>% 
+  filter(sentiment == "fear")
+
+nrc_anger <- get_sentiments("nrc") %>% 
+ filter(sentiment == "fear")
+
+nrc_positive <- get_sentiments("nrc") %>% 
+  filter(sentiment == "positive")
+
+nrc_negative <- get_sentiments("nrc") %>% 
+  filter(sentiment == "negative")
+
+nrc_negative <- get_sentiments("nrc") %>% 
+ filter(sentiment == "anger")
+```
+
+```{r, echo=FALSE, warning=FALSE}
+Name_vg <- df_sales$Name  
+Name_vg <- Name_vg %>%
+  tibble(Name_vg)
+
+Name_gm <- Name_vg %>%
+  unnest_tokens(word, Name_vg) %>%
+  anti_join(stop_words)
+
+Fear <- Name_gm %>%
+  inner_join(nrc_fear) %>%
+  count(word, sort = TRUE)
+
+Joy <- Name_gm %>%
+  inner_join(nrc_joy) %>%
+  count(word, sort = TRUE)
+ 
+Sad<- Name_gm %>%
+  inner_join(nrc_sad) %>%
+  count(word, sort = TRUE)
+ 
+Positive<- Name_gm %>%
+  inner_join(nrc_positive) %>%
+  count(word, sort = TRUE)
+
+Negative <- Name_gm %>%
+  inner_join(nrc_negative) %>%
+  count(word, sort = TRUE)
+
+Anger <- Name_gm %>%
+  inner_join(nrc_anger) %>%
+  count(word, sort = TRUE)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+  Cloud <- Name_gm %>%
+  inner_join(get_sentiments("bing")) %>%
+  count(word, sentiment, sort = TRUE) %>%
+  acast(word ~ sentiment, value.var = "n", fill = 0) %>%
+  comparison.cloud(colors=brewer.pal(8, "Dark2"),max.words = 100)
+
+```
+ 
+```{r, echo=FALSE, warning=FALSE}
+  Sentiments <- Name_gm %>%
+  inner_join(get_sentiments("nrc")) %>%
+  count(word, sentiment, sort = TRUE)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ A <-Sentiments %>%
+  group_by(sentiment) %>%
+  summarise(total_records=n())%>%
+  arrange(desc(total_records))
+
+  Senti <-A  %>%
+  filter(sentiment=="fear" | sentiment=="trust"| sentiment=="anger" | sentiment =="anticipation"|   sentiment=="joy"| sentiment=="sadness"| sentiment=="disgust" | sentiment=="surprise" )
+
+
+Pie <-Senti %>%
+summarise(sentiment, Percent = round((total_records / sum(total_records ))*100) )
+```
+
+```{r, echo=FALSE, warning=FALSE}
+  Senti_plot<- ggplot(Pie, aes(x = "", y = Percent, fill =sentiment)) +
+  geom_col(color = "Grey") +
+  geom_text(aes(label = Percent),
+            position = position_stack(vjust = 0.5)) +
+  ggtitle("Sentimental Analysis based on the name of the Game")+
+  coord_polar(theta = "y")
+Cloud
+Senti_plot
+```
+## **Conclusion:** 
+## Sentiment Analysis were performed on the name of the Games, which were divided into Positive and Negative sentiments and furthermore, they were categorzised into Emotional Sentiments like Anger, Fear, Disgust, Joy, Surprise etc. 
+## hrough this we can understand how publishers strategise Words with emotions while naming the Games, which attracts the customers to purchase based on their prefered Emotions. 
+## Based on these analysis we can say that 20% of the words used were for fear, followed by anger and trust at 14% each. This is how the publishers strategise their sales based on emotions to lure the customers.  
+ 
+##  ** Q.9 Sentiment Analysis based on Top 100 Metascores **
+```{r, echo=FALSE, warning=FALSE}
+Top_games <- df_reviews %>% 
+  filter(Metascore>90)%>%
+select(Summary)
+
+Top_game  <- Top_games %>%
+  tibble(Top_games$Summary) 
+
+data(stop_words)
+
+Top_100_game <- Top_game %>%
+  unnest_tokens(word, Summary) %>%
+  anti_join(stop_words)
+
+emotions <- get_sentiments("nrc") 
+ 
+Game <- Top_100_game %>%
+  inner_join(emotions) %>%
+  count(word, sort = TRUE)%>%
+ filter(n >50) %>%
+  mutate(word = reorder(word, n))
+```
+
+```{r, echo=FALSE, warning=FALSE}
+ Top100 <- Game%>%
+wordcloud2(n,size = 0.5,color = 'random-light',backgroundColor = 'Black')
+Top100
+```
+
+## We used Text Mining on Names of the games to analyze the data for Sentiment Analysis.
+## It’s often when consumer purchase products on the basis of the product summary/ description.
+##Here, we can see the words used repeatedly in description of the top 100 video games, to understand the consumer trends on the basis of usage of words that were attracting consumers to purchase the game. 
+
+
+## **Time Series**
+
+## ** Q.10 What would be the trend for the next 50 days of the sales in North America ?**
+
+```{r, echo=FALSE, warning=FALSE, figures-side5, fig.show="hold", out.width="50%"}
+ America <- df_games %>%
+select(NA_Sales,Year,Release_quarter) %>%
+filter(is.na(NA_Sales)== FALSE)%>%
+filter(is.na(Year)== FALSE)%>%
+arrange((Year))
+
+SMA50<- SMA(America$NA_Sales,n=50)
+ SMA_plot<- plot.ts(SMA50)
+
+Decompose_SMA50<- ts(SMA50, frequency=75, start=c(1990,1))
+SMA50_Decomp<-decompose(Decompose_SMA50)
+ SMA_plot_decompose<-plot(SMA50_Decomp)
+
+```
+## **Conclusion : ** The 50-day simple moving average (SMA) is used by traders as an effective trend indicator. The 50-day average is considered the most important because it's the first line of support in an uptrend or the first line of resistance in a downtrend.
+#From the Decomposition graph we can say that the sales are pretty low and would gradually increase near 40th  or 45th day.
+
+## ** Q.11 What would be the global sales for the next 5 years?**
+
+```{r, echo=FALSE, warning=FALSE, figures-side6, fig.show="hold", out.width="50%"}
+ Sales<-
+df_games %>%
+select(Year,Release_quarter,Global_Sales)%>%
+filter(is.na(Global_Sales)== FALSE)%>%
+filter(is.na(Year)== FALSE)%>%
+filter((Year) < 2015)%>%
+group_by(Year,Release_quarter) %>%
+summarise(Sales=sum(Global_Sales))
+
+Sales_Total <- ts(Sales$Sales, frequency=4, start=c(2000,1))
+
+plot(decompose(Sales_Total))
+
+gg<- auto.arima(Sales_Total)
+autoplot(forecast(gg,20))
+```
+# ** Conclusion : **Using Decomposition of additive time series we are Decomposing global sales.The seasonal ,trend and the observed valuesare components of additive time series.Further  we are using Arima model -(p), the number of lag observations or autoregressive terms in the model; I (d), the difference in the nonseasonal observations; and MA (q), the size of the moving average window .Arima(p,d,q)->(0,1,0)is best fitted for our analysis for prediction of Global sales for the next 5 years.The dark line is 95 % accurate We observe that there is no significant growth in the sales of the video games.As shades change (become lighter) the accuracy reduces by 10 %.
+
+
+## ** Q.12 Reccurence Plot for Global Sales **
+```{r, echo=FALSE, warning=FALSE}
+
+
+ts <- df_vgsales$Global_Sales[2000:2200]
+rqa.analysis1=rqa(time.series = ts, embedding.dim=2, time.lag=1,
+radius=0.01,lmin=2,do.plot=FALSE,distanceToBorder=2)
+rqa.analysis2=rqa(time.series = ts, embedding.dim=2, time.lag=5,
+radius=0.01,lmin=2,do.plot=FALSE,distanceToBorder=2)
+rqa.analysis3=rqa(time.series = ts, embedding.dim=2, time.lag=50,
+radius=0.01,lmin=2,do.plot=FALSE,distanceToBorder=2)
+rqa.analysis4=rqa(time.series = ts, embedding.dim=3, time.lag=1,
+radius=0.03,lmin=2,do.plot=FALSE,distanceToBorder=2)
+rqa.analysis5=rqa(time.series = ts, embedding.dim=4, time.lag=5,
+radius=0.05,lmin=2,do.plot=FALSE,distanceToBorder=2)
+ 
+
+ 
+
+
+```
+
+
+
+```{r, echo=FALSE, warning=FALSE, figures-side7, fig.show="hold", out.width="50%"}
+plot(rqa.analysis1,main="Embedding Dim=2,Time Lag=1,Radius=0.01")
+plot(rqa.analysis2,main="Embedding Dim=2,Time Lag=5,Radius=0.01")
+plot(rqa.analysis3,main="Embedding Dim=2,Time Lag=50,Radius=0.01")
+plot(rqa.analysis4,main="Embedding Dim=3,Time Lag=1,Radius=0.03")
+plot(rqa.analysis5,main="Embedding Dim=4,Time Lag=5,Radius=0.05")
+```
+
+## ** Conclusion :** Through RQA we can  quantify the sales  and duration of the recurrences in the phase space.
+##We can observe how the graph changes when we change the Lag it becomes thinner and while increasing the dimension it becomes thicker as also the radius is increased.
+
+
+##  **  Q.13 Visibility Graphs and the Horizontal Visibility Graph of the Metascore using Python **
+```{r, echo=FALSE, warning=FALSE, figures-side8, fig.show="hold", out.width="50%"}
+
+#Visibility Graphs and the Horizontal Visibility Graph
+knitr::include_graphics("1.png")
+knitr::include_graphics("2.png")
+knitr::include_graphics("3.png")
+knitr::include_graphics("4.png")
+knitr::include_graphics("5.png")
+knitr::include_graphics("6.png")
+knitr::include_graphics("7.png")
+knitr::include_graphics("8.png")
+knitr::include_graphics("9.png")
+knitr::include_graphics("10.png")
+knitr::include_graphics("11.png")
+knitr::include_graphics("12.png")
+knitr::include_graphics("13.png")
+```
+
+## **Conclusion :**The Visibility Graph and Horigontal Visibility Graph have been printed.The Permutation Entropy, Complexity,number of Nodes,Links, the Average Degree,Network Diameter and the Average Path Length of the 'metascore' have been computed.
+##The Average Path Length of the Visibility Graph is lower than that of the Horizontal Visibility Graph which means the average shortest distance between two nodes in the graph is shorter in the Visibility Graph.
+
+
+
+## **Summary:** After running the analysis above we have put together the concepts of Probability, Cluster Analysis, Text Analysis and Time Series Analysis we could highlight the trends that the Video Game companies follow to target their audiences. We could analysis and run the descriptive, predictive and prescriptive Analysis to make understand the dataset in depth and  made some key highlights:  
+## Sentimental Analysis helped us understand the purchase patterns of customers  based on words and their liking in a specific Genre
+## Observation of the probability of Games Developed on the basis of their Genre and for the various Age Groups
+## How the Critic scores affected the User’s Score
+## How can we predict the future seasonal trends of sales in the coming 50 days through SMA and for 5 years through Arima model.
+
